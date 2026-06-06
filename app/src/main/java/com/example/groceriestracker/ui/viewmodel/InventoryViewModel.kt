@@ -43,8 +43,8 @@ class InventoryViewModel(
     val isAuthAndKeySet: StateFlow<Boolean> = combine(
         _geminiApiKey,
         _googleAccountName
-    ) { key, account ->
-        key.isNotEmpty() && account != null
+    ) { key, _ ->
+        key.isNotEmpty()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     val knownItems: StateFlow<List<Item>> = repository.knownItemsFlow
@@ -58,6 +58,35 @@ class InventoryViewModel(
 
     private val _syncUiState = MutableStateFlow<SyncUiState>(SyncUiState.Idle)
     val syncUiState: StateFlow<SyncUiState> = _syncUiState
+
+    private val _spaces = MutableStateFlow(repository.getSpaces().toList().sorted())
+    val spaces: StateFlow<List<String>> = _spaces
+
+    fun addSpace(space: String) {
+        repository.addSpace(space)
+        _spaces.value = repository.getSpaces().toList().sorted()
+    }
+
+    fun removeSpace(space: String) {
+        repository.removeSpace(space)
+        _spaces.value = repository.getSpaces().toList().sorted()
+        viewModelScope.launch {
+            val items = repository.getKnownItemsList()
+            val defaultSpace = repository.getSpaces().firstOrNull() ?: "Pantry"
+            for (item in items) {
+                if (item.space == space) {
+                    repository.updateItem(item.copy(space = defaultSpace))
+                }
+            }
+        }
+    }
+
+    fun deleteItem(item: Item, context: Context) {
+        viewModelScope.launch {
+            repository.deleteItem(item)
+            triggerTasksSync(context)
+        }
+    }
 
     fun setApiKey(key: String) {
         repository.setGeminiApiKey(key)
@@ -119,7 +148,7 @@ class InventoryViewModel(
         }
     }
 
-    fun addItemManually(name: String, category: String, quantity: Int, isInShoppingList: Boolean, context: Context) {
+    fun addItemManually(name: String, category: String, quantity: Int, isInShoppingList: Boolean, space: String, context: Context) {
         viewModelScope.launch {
             val existing = repository.getItemByName(name)
             if (existing != null) {
@@ -127,6 +156,7 @@ class InventoryViewModel(
                     category = category,
                     currentQuantity = quantity,
                     isInShoppingList = isInShoppingList,
+                    space = space,
                     isKnown = true
                 )
                 repository.updateItem(updated)
@@ -136,6 +166,7 @@ class InventoryViewModel(
                     category = category,
                     currentQuantity = quantity,
                     isInShoppingList = isInShoppingList,
+                    space = space,
                     isKnown = true
                 )
                 repository.insertItem(newItem)
@@ -144,7 +175,7 @@ class InventoryViewModel(
         }
     }
 
-    fun auditFridgePantry(bitmap: Bitmap, context: Context) {
+    fun auditFridgePantry(bitmaps: List<Bitmap>, selectedSpace: String, context: Context) {
         val apiKey = _geminiApiKey.value
         if (apiKey.isEmpty()) {
             _scannerUiState.value = ScannerUiState.Error("API Key is missing")
@@ -154,8 +185,22 @@ class InventoryViewModel(
         _scannerUiState.value = ScannerUiState.Auditing
         viewModelScope.launch {
             try {
-                val currentKnown = repository.getKnownItemsList()
-                val results = geminiManager.auditPantry(bitmap, apiKey, currentKnown)
+                val allKnown = repository.getKnownItemsList()
+                val spaceKnown = allKnown.filter { it.space.equals(selectedSpace, ignoreCase = true) }
+                
+                val results = geminiManager.auditPantry(bitmaps, apiKey, spaceKnown)
+                
+                val foundNames = results.map { it.itemName.lowercase() }
+                
+                for (knownItem in spaceKnown) {
+                    if (knownItem.name.lowercase() !in foundNames) {
+                        val updated = knownItem.copy(
+                            currentQuantity = 0,
+                            isInShoppingList = true
+                        )
+                        repository.updateItem(updated)
+                    }
+                }
                 
                 for (res in results) {
                     val existingItem = repository.getItemByName(res.itemName)
@@ -165,6 +210,7 @@ class InventoryViewModel(
                         val updated = existingItem.copy(
                             currentQuantity = res.quantity,
                             isInShoppingList = res.status == "missing" || res.action == "add_to_shopping_list",
+                            space = selectedSpace,
                             isKnown = true
                         )
                         repository.updateItem(updated)
@@ -174,13 +220,14 @@ class InventoryViewModel(
                             category = category,
                             currentQuantity = res.quantity,
                             isInShoppingList = res.status == "missing" || res.action == "add_to_shopping_list",
+                            space = selectedSpace,
                             isKnown = true
                         )
                         repository.insertItem(newItem)
                     }
                 }
                 
-                _scannerUiState.value = ScannerUiState.Success("Audit completed. Found ${results.size} items.")
+                _scannerUiState.value = ScannerUiState.Success("Audit completed for $selectedSpace. Found ${results.size} items.")
                 triggerTasksSync(context)
             } catch (e: Exception) {
                 Log.e("InventoryViewModel", "Audit failed", e)

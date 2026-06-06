@@ -13,11 +13,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -64,6 +66,7 @@ fun SettingsView(
 
     var inputKey by remember(apiKey) { mutableStateOf(apiKey) }
     var isKeyVisible by remember { mutableStateOf(false) }
+    var authError by remember { mutableStateOf<String?>(null) }
 
     // Google Sign-In options
     val gso = remember {
@@ -77,17 +80,21 @@ fun SettingsView(
     val signInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-            try {
-                val account = task.getResult(ApiException::class.java)
-                val email = account?.email
-                if (email != null) {
-                    viewModel.signInGoogle(email, context)
-                }
-            } catch (e: ApiException) {
-                Log.e("SettingsView", "Google sign in failed: status code ${e.statusCode}", e)
+        Log.d("SettingsView", "Google Sign-In activity result code: ${result.resultCode}")
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        try {
+            val account = task.getResult(ApiException::class.java)
+            val email = account?.email
+            if (email != null) {
+                viewModel.signInGoogle(email, context)
+            } else {
+                Log.w("SettingsView", "Google sign in succeeded but email was null")
+                authError = "Error: Authenticated account has no email."
             }
+        } catch (e: ApiException) {
+            val errorMsg = "Google sign in failed: status code ${e.statusCode} (Result code: ${result.resultCode})"
+            Log.e("SettingsView", errorMsg, e)
+            authError = errorMsg
         }
     }
 
@@ -158,6 +165,92 @@ fun SettingsView(
             }
         }
 
+        // Manage Inventory Spaces Card
+        val spaces by viewModel.spaces.collectAsState()
+        var newSpaceName by remember { mutableStateOf("") }
+
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Manage Inventory Spaces",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Add or remove custom spaces like Fridge, Freezer, Pantry, or Cupboard. Removing a space updates its items to the default space.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    spaces.forEach { space ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = space,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (spaces.size > 1) {
+                                IconButton(
+                                    onClick = { viewModel.removeSpace(space) }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete Space",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = newSpaceName,
+                        onValueChange = { newSpaceName = it },
+                        label = { Text("New Space Name") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            if (newSpaceName.trim().isNotEmpty()) {
+                                viewModel.addSpace(newSpaceName.trim())
+                                newSpaceName = ""
+                            }
+                        },
+                        enabled = newSpaceName.trim().isNotEmpty() && newSpaceName.trim() !in spaces,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Add")
+                    }
+                }
+            }
+        }
+
         // Google Tasks Integration Card
         Card(
             shape = RoundedCornerShape(16.dp),
@@ -168,7 +261,7 @@ fun SettingsView(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Google Tasks Integration",
+                    text = "Google Tasks Integration (Optional)",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -224,30 +317,42 @@ fun SettingsView(
                         }
                     }
                 } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = "Not Authenticated",
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Not Connected",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-
-                        Button(
-                            onClick = {
-                                signInLauncher.launch(googleSignInClient.signInIntent)
-                            },
-                            shape = RoundedCornerShape(8.dp)
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Sign in with Google")
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = "Not Connected",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Not Connected (Optional)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+
+                            Button(
+                                onClick = {
+                                    authError = null
+                                    signInLauncher.launch(googleSignInClient.signInIntent)
+                                },
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Sign in with Google")
+                            }
+                        }
+                        authError?.let { errorMsg ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = errorMsg,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(start = 32.dp)
+                            )
                         }
                     }
                 }

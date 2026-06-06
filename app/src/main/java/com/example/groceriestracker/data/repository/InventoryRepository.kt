@@ -32,6 +32,11 @@ interface InventoryRepository {
     fun getGoogleTasksListId(): String?
     fun setGoogleTasksListId(id: String?)
     fun clearAuth()
+    
+    // Spaces management
+    fun getSpaces(): Set<String>
+    fun addSpace(space: String)
+    fun removeSpace(space: String)
 }
 
 class DefaultInventoryRepository(
@@ -67,4 +72,8 @@ class DefaultInventoryRepository(
     override fun getGoogleTasksListId(): String? = prefsManager.getGoogleTasksListId()
     override fun setGoogleTasksListId(id: String?) = prefsManager.setGoogleTasksListId(id)
     override fun clearAuth() = prefsManager.clearAuth()
+
+    override fun getSpaces(): Set<String> = prefsManager.getSpaces()
+    override fun addSpace(space: String) = prefsManager.addSpace(space)
+    override fun removeSpace(space: String) = prefsManager.removeSpace(space)
 }

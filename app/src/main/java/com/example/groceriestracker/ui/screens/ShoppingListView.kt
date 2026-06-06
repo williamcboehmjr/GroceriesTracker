@@ -139,7 +139,7 @@ fun ShoppingListView(
             onDismiss = { showAddDialog = false },
             onConfirm = { name, cat ->
                 // Adding directly to shopping list: initial quantity is 0, isInShoppingList = true
-                viewModel.addItemManually(name, cat, 0, true, context)
+                viewModel.addItemManually(name, cat, 0, true, "Pantry", context)
                 showAddDialog = false
             }
         )

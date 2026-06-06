@@ -9,6 +9,7 @@ data class Item(
     val id: Int = 0,
     val name: String,
     val category: String, // e.g. "Grocery", "Household"
+    val space: String = "Pantry",
     val isKnown: Boolean = true,
     val currentQuantity: Int = 0,
     val isInShoppingList: Boolean = false,

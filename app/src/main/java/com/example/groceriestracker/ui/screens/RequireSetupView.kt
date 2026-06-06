@@ -48,7 +48,7 @@ fun RequireSetupView(
         )
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = "To unlock the Camera Scanner, automatic inventory audit, and shopping list cloud syncing, you need to configure your Gemini API Key and sign in with Google.",
+            text = "To unlock the Camera Scanner and automatic inventory audit, you need to configure your Gemini API Key in Settings.",
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant

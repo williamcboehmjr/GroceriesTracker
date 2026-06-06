@@ -53,9 +53,26 @@ class PreferencesManager(context: Context) {
             .apply()
     }
 
+    fun getSpaces(): Set<String> {
+        return sharedPrefs.getStringSet(KEY_SPACES, setOf("Fridge", "Freezer", "Pantry", "Cupboard")) ?: setOf("Fridge", "Freezer", "Pantry", "Cupboard")
+    }
+
+    fun addSpace(space: String) {
+        val current = getSpaces().toMutableSet()
+        current.add(space)
+        sharedPrefs.edit().putStringSet(KEY_SPACES, current).apply()
+    }
+
+    fun removeSpace(space: String) {
+        val current = getSpaces().toMutableSet()
+        current.remove(space)
+        sharedPrefs.edit().putStringSet(KEY_SPACES, current).apply()
+    }
+
     companion object {
         private const val KEY_GEMINI_API_KEY = "gemini_api_key"
         private const val KEY_GOOGLE_ACCOUNT_NAME = "google_account_name"
         private const val KEY_GOOGLE_TASKS_LIST_ID = "google_tasks_list_id"
+        private const val KEY_SPACES = "custom_spaces"
     }
 }

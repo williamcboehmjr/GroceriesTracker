@@ -6,7 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.example.groceriestracker.data.model.Item
 
-@Database(entities = [Item::class], version = 1, exportSchema = false)
+@Database(entities = [Item::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun itemDao(): ItemDao
 

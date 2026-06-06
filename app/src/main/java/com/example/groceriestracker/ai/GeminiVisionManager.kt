@@ -11,7 +11,7 @@ import org.json.JSONObject
 class GeminiVisionManager {
 
     suspend fun auditPantry(
-        bitmap: Bitmap,
+        bitmaps: List<Bitmap>,
         apiKey: String,
         knownItems: List<Item>,
         modelName: String = "gemini-3.5-flash"
@@ -28,7 +28,9 @@ class GeminiVisionManager {
         }
 
         val prompt = """
-            Analyze this image of a fridge/pantry. Identify all items and their estimated quantities. Compare this against a provided list of 'known' items. Return a JSON array detailing what is present, what is new, and what known items appear to be missing. 
+            Analyze these sequential images from a fridge/pantry sweep. They are captured in a burst to cover different shelves and angles. Identify all items and their estimated quantities.
+            Please de-duplicate any items that appear in multiple images (choose the most accurate count/presence).
+            Compare this against a provided list of 'known' items. Return a JSON array detailing what is present, what is new, and what known items appear to be missing. 
             Example format: `[{"item": "June Shine", "status": "missing", "action": "add_to_shopping_list"}, {"item": "Spicy Italian Sausage", "status": "in_stock", "quantity": 2}, {"item": "Mozz's Cat Food", "status": "low_stock", "quantity": 1}]`.
             
             Return ONLY the raw JSON array. Do not wrap it in markdown code blocks or add any other text outside the JSON.
@@ -38,7 +40,7 @@ class GeminiVisionManager {
         """.trimIndent()
 
         val inputContent = content {
-            image(bitmap)
+            bitmaps.forEach { image(it) }
             text(prompt)
         }
 
