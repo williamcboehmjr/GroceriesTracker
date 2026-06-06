@@ -159,38 +159,6 @@ fun ScannerView(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Space Selection Chips
-        if (!isBurstActive && scannerState is ScannerUiState.Idle) {
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopCenter)
-                    .padding(top = 16.dp, start = 16.dp, end = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(spaces) { space ->
-                    val isSelected = space == selectedSpace
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(
-                                if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
-                                else Color.Black.copy(alpha = 0.6f)
-                            )
-                            .clickable { selectedSpace = space }
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Text(
-                            text = space,
-                            color = Color.White,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                        )
-                    }
-                }
-            }
-        }
-
         // Burst scanning overlay (when capturing photos)
         if (isBurstActive) {
             Box(
@@ -339,51 +307,83 @@ fun ScannerView(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(32.dp),
+                            .padding(bottom = 16.dp, start = 16.dp, end = 16.dp),
                         contentAlignment = Alignment.BottomCenter
                     ) {
-                        // Capture button
-                        Button(
-                            onClick = {
-                                if (imageCapture != null) {
-                                    scope.launch {
-                                        isBurstActive = true
-                                        val capturedBitmaps = mutableListOf<Bitmap>()
-                                        try {
-                                            for (i in 1..totalFrames) {
-                                                currentFrame = i
-                                                val bitmap = imageCapture?.takePictureSuspending(cameraExecutor)
-                                                if (bitmap != null) {
-                                                    capturedBitmaps.add(bitmap)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            // Capture button
+                            Button(
+                                onClick = {
+                                    if (imageCapture != null) {
+                                        scope.launch {
+                                            isBurstActive = true
+                                            val capturedBitmaps = mutableListOf<Bitmap>()
+                                            try {
+                                                for (i in 1..totalFrames) {
+                                                    currentFrame = i
+                                                    val bitmap = imageCapture?.takePictureSuspending(cameraExecutor)
+                                                    if (bitmap != null) {
+                                                        capturedBitmaps.add(bitmap)
+                                                    }
+                                                    if (i < totalFrames) {
+                                                        delay(800)
+                                                    }
                                                 }
-                                                if (i < totalFrames) {
-                                                    delay(800)
+                                                if (capturedBitmaps.isNotEmpty()) {
+                                                    viewModel.auditFridgePantry(capturedBitmaps, selectedSpace, context)
                                                 }
+                                            } catch (e: Exception) {
+                                                Log.e("ScannerView", "Burst capture failed", e)
+                                            } finally {
+                                                isBurstActive = false
+                                                currentFrame = 0
                                             }
-                                            if (capturedBitmaps.isNotEmpty()) {
-                                                viewModel.auditFridgePantry(capturedBitmaps, selectedSpace, context)
-                                            }
-                                        } catch (e: Exception) {
-                                            Log.e("ScannerView", "Burst capture failed", e)
-                                        } finally {
-                                            isBurstActive = false
-                                            currentFrame = 0
                                         }
                                     }
-                                }
-                            },
-                            modifier = Modifier
-                                .size(76.dp)
-                                .clip(CircleShape),
-                            shape = CircleShape
-                        ) {
-                            // Custom inner circle design
-                            Box(
+                                },
                                 modifier = Modifier
-                                    .size(56.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White)
-                            )
+                                    .size(76.dp)
+                                    .clip(CircleShape),
+                                shape = CircleShape
+                            ) {
+                                // Custom inner circle design
+                                Box(
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.White)
+                                )
+                            }
+
+                            // Space Selection Chips
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+                            ) {
+                                items(spaces) { space ->
+                                    val isSelected = space == selectedSpace
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(20.dp))
+                                            .background(
+                                                if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                                                else Color.Black.copy(alpha = 0.6f)
+                                            )
+                                            .clickable { selectedSpace = space }
+                                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    ) {
+                                        Text(
+                                            text = space,
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
