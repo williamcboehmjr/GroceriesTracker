@@ -152,12 +152,56 @@ fun ScannerView(
     var currentFrame by remember { mutableStateOf(0) }
     val totalFrames = 6
 
+    // Guided scan state
+    var guidedStep by remember { mutableStateOf(0) } // 0: Idle, 1: Main shelves, 2: Door shelves, 3: Crisper drawers
+    var guidedBitmaps by remember { mutableStateOf(emptyList<Bitmap>()) }
+
     Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
         // Camera Preview
         CameraPreview(
             onImageCaptureCreated = { capture -> imageCapture = capture },
             modifier = Modifier.fillMaxSize()
         )
+
+        // Guided scan instruction overlay
+        if (guidedStep > 0 && !isBurstActive && scannerState is ScannerUiState.Idle) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .padding(16.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Black.copy(alpha = 0.7f))
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Step $guidedStep of 3: ${
+                            when (guidedStep) {
+                                1 -> "Main Inside Shelves"
+                                2 -> "Door Shelves"
+                                else -> "Crisper Drawers"
+                            }
+                        }",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = when (guidedStep) {
+                            1 -> "Position the camera to capture the main shelves."
+                            2 -> "Position the camera to capture the door compartments."
+                            else -> "Position the camera to capture the bottom drawers."
+                        },
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
 
         // Burst scanning overlay (when capturing photos)
         if (isBurstActive) {
@@ -314,73 +358,159 @@ fun ScannerView(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            // Capture button
-                            Button(
-                                onClick = {
-                                    if (imageCapture != null) {
-                                        scope.launch {
-                                            isBurstActive = true
-                                            val capturedBitmaps = mutableListOf<Bitmap>()
-                                            try {
-                                                for (i in 1..totalFrames) {
-                                                    currentFrame = i
-                                                    val bitmap = imageCapture?.takePictureSuspending(cameraExecutor)
-                                                    if (bitmap != null) {
-                                                        capturedBitmaps.add(bitmap)
-                                                    }
-                                                    if (i < totalFrames) {
-                                                        delay(800)
+                            if (guidedStep > 0) {
+                                // Guided scan progress indicators
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    for (i in 1..3) {
+                                        val active = i <= guidedStep
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    if (active) MaterialTheme.colorScheme.primary
+                                                    else Color.Gray.copy(alpha = 0.5f)
+                                                )
+                                        )
+                                    }
+                                }
+
+                                // Bottom capture & cancel row
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    // Cancel Button on the left
+                                    Button(
+                                        onClick = {
+                                            guidedStep = 0
+                                            guidedBitmaps = emptyList()
+                                        },
+                                        shape = RoundedCornerShape(20.dp),
+                                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                            containerColor = Color.Black.copy(alpha = 0.6f),
+                                            contentColor = Color.White
+                                        ),
+                                        modifier = Modifier.align(Alignment.CenterStart)
+                                    ) {
+                                        Text("Cancel")
+                                    }
+
+                                    // Capture button in the center
+                                    Button(
+                                        onClick = {
+                                            if (imageCapture != null) {
+                                                scope.launch {
+                                                    try {
+                                                        val bitmap = imageCapture?.takePictureSuspending(cameraExecutor)
+                                                        if (bitmap != null) {
+                                                            val updatedList = guidedBitmaps + bitmap
+                                                            if (guidedStep < 3) {
+                                                                guidedBitmaps = updatedList
+                                                                guidedStep++
+                                                            } else {
+                                                                guidedStep = 0
+                                                                guidedBitmaps = emptyList()
+                                                                viewModel.auditFridgePantry(updatedList, selectedSpace, context)
+                                                            }
+                                                        }
+                                                    } catch (e: Exception) {
+                                                        Log.e("ScannerView", "Guided capture failed", e)
                                                     }
                                                 }
-                                                if (capturedBitmaps.isNotEmpty()) {
-                                                    viewModel.auditFridgePantry(capturedBitmaps, selectedSpace, context)
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .size(76.dp)
+                                            .clip(CircleShape),
+                                        shape = CircleShape
+                                    ) {
+                                        // Custom inner circle design
+                                        Box(
+                                            modifier = Modifier
+                                                .size(56.dp)
+                                                .clip(CircleShape)
+                                                .background(Color.White)
+                                        )
+                                    }
+                                }
+                            } else {
+                                // Standard Capture button
+                                Button(
+                                    onClick = {
+                                        if (selectedSpace.equals("Fridge", ignoreCase = true)) {
+                                            guidedStep = 1
+                                            guidedBitmaps = emptyList()
+                                        } else {
+                                            if (imageCapture != null) {
+                                                scope.launch {
+                                                    isBurstActive = true
+                                                    val capturedBitmaps = mutableListOf<Bitmap>()
+                                                    try {
+                                                        for (i in 1..totalFrames) {
+                                                            currentFrame = i
+                                                            val bitmap = imageCapture?.takePictureSuspending(cameraExecutor)
+                                                            if (bitmap != null) {
+                                                                capturedBitmaps.add(bitmap)
+                                                            }
+                                                            if (i < totalFrames) {
+                                                                delay(800)
+                                                            }
+                                                        }
+                                                        if (capturedBitmaps.isNotEmpty()) {
+                                                            viewModel.auditFridgePantry(capturedBitmaps, selectedSpace, context)
+                                                        }
+                                                    } catch (e: Exception) {
+                                                        Log.e("ScannerView", "Burst capture failed", e)
+                                                    } finally {
+                                                        isBurstActive = false
+                                                        currentFrame = 0
+                                                    }
                                                 }
-                                            } catch (e: Exception) {
-                                                Log.e("ScannerView", "Burst capture failed", e)
-                                            } finally {
-                                                isBurstActive = false
-                                                currentFrame = 0
                                             }
                                         }
-                                    }
-                                },
-                                modifier = Modifier
-                                    .size(76.dp)
-                                    .clip(CircleShape),
-                                shape = CircleShape
-                            ) {
-                                // Custom inner circle design
-                                Box(
+                                    },
                                     modifier = Modifier
-                                        .size(56.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.White)
-                                )
-                            }
-
-                            // Space Selection Chips
-                            LazyRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
-                            ) {
-                                items(spaces) { space ->
-                                    val isSelected = space == selectedSpace
+                                        .size(76.dp)
+                                        .clip(CircleShape),
+                                    shape = CircleShape
+                                ) {
+                                    // Custom inner circle design
                                     Box(
                                         modifier = Modifier
-                                            .clip(RoundedCornerShape(20.dp))
-                                            .background(
-                                                if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
-                                                else Color.Black.copy(alpha = 0.6f)
+                                            .size(56.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.White)
+                                    )
+                                }
+
+                                // Space Selection Chips
+                                LazyRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+                                ) {
+                                    items(spaces) { space ->
+                                        val isSelected = space == selectedSpace
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(20.dp))
+                                                .background(
+                                                    if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                                                    else Color.Black.copy(alpha = 0.6f)
+                                                )
+                                                .clickable { selectedSpace = space }
+                                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                        ) {
+                                            Text(
+                                                text = space,
+                                                color = Color.White,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                             )
-                                            .clickable { selectedSpace = space }
-                                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                                    ) {
-                                        Text(
-                                            text = space,
-                                            color = Color.White,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                        )
+                                        }
                                     }
                                 }
                             }

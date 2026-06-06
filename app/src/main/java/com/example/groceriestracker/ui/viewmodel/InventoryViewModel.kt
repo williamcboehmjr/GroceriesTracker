@@ -206,10 +206,25 @@ class InventoryViewModel(
                     val existingItem = repository.getItemByName(res.itemName)
                     val category = existingItem?.category ?: "Grocery"
                     
+                    val isMissing = res.status == "missing"
+                    val isLowStock = res.status == "low_stock"
+                    
+                    val finalQuantity = if (existingItem == null) {
+                        if (res.quantity > 0) res.quantity else 1
+                    } else {
+                        if (isMissing) 0 else (if (res.quantity > 0) res.quantity else 1)
+                    }
+                    
+                    val finalIsInShoppingList = if (existingItem == null) {
+                        false
+                    } else {
+                        isMissing || isLowStock || res.action == "add_to_shopping_list"
+                    }
+                    
                     if (existingItem != null) {
                         val updated = existingItem.copy(
-                            currentQuantity = res.quantity,
-                            isInShoppingList = res.status == "missing" || res.action == "add_to_shopping_list",
+                            currentQuantity = finalQuantity,
+                            isInShoppingList = finalIsInShoppingList,
                             space = selectedSpace,
                             isKnown = true
                         )
@@ -218,8 +233,8 @@ class InventoryViewModel(
                         val newItem = Item(
                             name = res.itemName,
                             category = category,
-                            currentQuantity = res.quantity,
-                            isInShoppingList = res.status == "missing" || res.action == "add_to_shopping_list",
+                            currentQuantity = finalQuantity,
+                            isInShoppingList = finalIsInShoppingList,
                             space = selectedSpace,
                             isKnown = true
                         )

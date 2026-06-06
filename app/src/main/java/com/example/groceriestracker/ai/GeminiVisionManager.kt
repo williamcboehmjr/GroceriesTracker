@@ -28,8 +28,14 @@ class GeminiVisionManager {
         }
 
         val prompt = """
-            Analyze these sequential images from a fridge/pantry sweep. They are captured in a burst to cover different shelves and angles. Identify all items and their estimated quantities.
+            Analyze these sequential images from a fridge/pantry sweep. They are captured to cover different shelves and angles. Identify all items and their estimated quantities.
+            
+            Ignore generic "containers" (e.g. tupperware, glass bowls, aluminum foil wraps, unnamed plastic storage/zip bags, generic home-cooked or leftover meals). Do NOT count or add these generic items to the inventory. Only identify and count clearly identifiable known products, raw food ingredients (like fruits, vegetables, meats, dairy products), beverages/drinks, or household items.
+            
+            Package-based Counting: When counting items, count them by their retail packaging unit, NOT by individual items inside. For example, a 12-pack of soda is counted as 1 unit of "Soda 12-pack" or "Soda (12-pack)", a 6-pack of yogurt is counted as 1 unit, a carton of eggs is counted as 1 unit, a bag of apples is counted as 1. Only count individual loose items if they are stored or sold loosely (like "3 loose apples").
+            
             Please de-duplicate any items that appear in multiple images (choose the most accurate count/presence).
+            
             Compare this against a provided list of 'known' items. Return a JSON array detailing what is present, what is new, and what known items appear to be missing. 
             Example format: `[{"item": "June Shine", "status": "missing", "action": "add_to_shopping_list"}, {"item": "Spicy Italian Sausage", "status": "in_stock", "quantity": 2}, {"item": "Mozz's Cat Food", "status": "low_stock", "quantity": 1}]`.
             
@@ -62,7 +68,10 @@ class GeminiVisionManager {
                 
                 val status = obj.optString("status", "in_stock")
                 val action = obj.optString("action", "")
-                val quantity = obj.optInt("quantity", if (status == "missing") 0 else 1)
+                var quantity = obj.optInt("quantity", if (status == "missing") 0 else 1)
+                if (status != "missing" && quantity <= 0) {
+                    quantity = 1
+                }
                 
                 list.add(
                     AuditResult(
